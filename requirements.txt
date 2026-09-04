@@ -1,0 +1,6 @@
+streamlit>=1.32.0
+py5paisa>=0.7.21
+python-dotenv>=1.0.0
+pandas>=2.0.0
+yfinance>=0.2.40
+pyotp>=2.9.0
