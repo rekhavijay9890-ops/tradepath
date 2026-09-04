@@ -1,5 +1,6 @@
 "use client";
 
+import { GettingStarted } from "@/components/getting-started";
 import { LearnPhase } from "@/components/learn-phase";
 import { LivePhase } from "@/components/live-phase";
 import { PaperTradePhase } from "@/components/paper-trade-phase";
@@ -78,12 +79,7 @@ function AppContent() {
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold">Your Trading Journey</h2>
-              <p className="text-muted-foreground mt-1">
-                Follow all 4 phases systematically. Most traders skip straight to live trading and lose money.
-              </p>
-            </div>
+            <GettingStarted />
             <PhaseProgress />
             <DashboardStats />
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

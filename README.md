@@ -1,72 +1,59 @@
-# IntradayPulse
+# TradePath
 
-An educational intraday stock screener for India's NSE and BSE markets. It ranks liquid stocks by volume, volatility, momentum, and range position to surface potential buy/sell setups for day trading.
+A complete 4-phase trading education and practice app for India's NSE/BSE markets. Guides you from learning the basics to paper trading, live trading with small capital, and scaling — with an intraday stock screener built in.
 
-**This is not financial advice.** Most retail intraday traders lose money. Use this tool for research and learning only.
+**This is not financial advice.** Most retail intraday traders lose money. Use this app for structured learning and practice only.
+
+## The 4-Phase Journey
+
+| Phase | Goal | What the app provides |
+|-------|------|----------------------|
+| **1. Learn** | 2–4 weeks of fundamentals | Order types, margin, costs, taxes, book recommendations, calculators, learning checklist |
+| **2. Paper Trade** | 30+ sessions, positive expectancy | Virtual ₹1L portfolio, trade journal (entry/exit/reason/emotion), expectancy analytics |
+| **3. Go Live** | ₹25K–50K, 1% risk per trade | Live trade logging, position size calculator, strategy lock-in |
+| **4. Scale** | 3 consecutive profitable months | Monthly P&L tracker, scaling rules, consecutive month counter |
 
 ## Features
 
-- Screens NIFTY 50, NIFTY 100, and Bank NIFTY universes
-- Scores each stock on 5 intraday factors (volume, volatility, momentum, range position, liquidity)
-- Signals: Strong Buy, Buy, Watch, Sell, Avoid
-- Live market data via Yahoo Finance (NSE `.NS` symbols)
-- Auto-refresh every 60 seconds during use
-- Built-in trading guide with Indian market context (STT, F&O rules, risk management)
+- **Dashboard** — Phase progress across all 4 stages
+- **Learning modules** — Interactive content on orders, margin, STT, taxes
+- **Cost & tax calculator** — See how fees eat into profits
+- **Paper trading** — Buy/sell with live NSE prices, virtual portfolio
+- **Trade journal** — Track symbol, strategy, emotion, P&L per trade
+- **Expectancy engine** — Win rate, avg win/loss, profit factor, per-trade expectancy
+- **Intraday screener** — NIFTY 50/100/Bank NIFTY stock ranking by volume, volatility, momentum
+- **Emotion insights** — See which emotions correlate with losses (REVENGE, FOMO)
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev
+npm run dev -- -p 4317
 ```
 
 Open [http://localhost:4317](http://localhost:4317).
+
+All data is stored in your browser (localStorage) — no account or database needed.
 
 ## API
 
 ```
 GET /api/screen?index=NIFTY50&minScore=55&signal=BUY
+GET /api/quote?symbol=RELIANCE
 ```
 
-| Parameter  | Values                                      | Default  |
-|------------|---------------------------------------------|----------|
-| `index`    | `NIFTY50`, `NIFTY100`, `BANKNIFTY`          | NIFTY50  |
-| `minScore` | 0–100                                       | 50       |
-| `signal`   | `STRONG_BUY`, `BUY`, `WATCH`, `SELL`, `AVOID` | (all)  |
-| `minVolume`| number                                      | 500000   |
+## How to use
 
-## How scoring works
-
-| Factor          | What it measures                                      |
-|-----------------|-------------------------------------------------------|
-| Volume          | Today's volume vs 3-month average (liquidity)         |
-| Volatility      | Day high–low range as % of price (1.5–4% ideal)       |
-| Momentum        | % change from previous close (1–3.5% ideal)           |
-| Range position  | Where price sits in today's range (trend continuation)|
-| Liquidity       | Price band and absolute volume thresholds             |
-
-## Can you make money intraday trading?
-
-Honestly: **it's hard**. A screener finds stocks with movement and liquidity — it cannot predict direction. Profitable intraday trading typically requires:
-
-1. Strict risk management (1–2% per trade, always stop-loss)
-2. A tested strategy (opening range breakout, VWAP reclaim, etc.)
-3. Discipline to avoid overtrading
-4. Accounting for STT, brokerage, and taxes on gains
-
-Paper trade before risking real capital.
-
-## Roadmap
-
-- [ ] Broker API integration (Zerodha Kite, Angel One)
-- [ ] VWAP, RSI, and ORB technical filters
-- [ ] NSE live data feed for real-time quotes
-- [ ] Historical backtesting of the scoring model
-- [ ] BSE-specific symbol support (`.BO`)
+1. Start on the **Dashboard** — see your phase progress
+2. Complete **Phase 1: Learn** — read all modules, use calculators, observe the screener daily
+3. Move to **Phase 2: Paper Trade** — place trades with virtual money, journal every trade
+4. Only advance to **Phase 3: Live** when you have 30+ sessions AND positive expectancy
+5. Log real trades in Phase 3 with strict 1% risk
+6. Track monthly P&L in **Phase 4: Scale** — only increase size after 3 profitable months
 
 ## Disclaimer
 
-This software is provided for educational purposes only. It does not constitute investment advice, a recommendation, or a solicitation to buy or sell any securities. Trading in securities involves substantial risk of loss. Consult a SEBI-registered investment advisor before making financial decisions. The authors are not liable for any trading losses.
+This software is for educational purposes only. It does not constitute investment advice. Trading involves substantial risk of loss. Consult a SEBI-registered advisor before making financial decisions.
 
 ## License
 
