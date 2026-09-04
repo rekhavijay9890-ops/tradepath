@@ -1,0 +1,18 @@
+{
+  "name": "TradePath",
+  "install": "chmod +x scripts/cloud-agent-install.sh && ./scripts/cloud-agent-install.sh",
+  "terminals": [
+    {
+      "name": "streamlit",
+      "command": "export PATH=\"$HOME/.local/bin:$PATH\" && streamlit run streamlit_app/app.py --server.port 8742 --server.address 0.0.0.0 --server.headless true"
+    },
+    {
+      "name": "nextjs",
+      "command": "npm run dev -- -p 4317 -H 0.0.0.0"
+    }
+  ],
+  "ports": [
+    { "name": "streamlit", "port": 8742 },
+    { "name": "nextjs", "port": 4317 }
+  ]
+}
