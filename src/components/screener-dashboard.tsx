@@ -143,7 +143,7 @@ function LoadingSkeleton() {
   );
 }
 
-export function ScreenerDashboard() {
+export function ScreenerDashboard({ embedded }: { embedded?: boolean }) {
   const [index, setIndex] = useState<IndexUniverse>("NIFTY50");
   const [minScore, setMinScore] = useState("55");
   const [signalFilter, setSignalFilter] = useState<string>("all");
@@ -178,7 +178,8 @@ export function ScreenerDashboard() {
   const sellCount = data?.picks.filter((p) => p.signal === "SELL").length ?? 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
+    <div className={embedded ? "space-y-6" : "min-h-screen bg-gradient-to-b from-background to-muted/30"}>
+      {!embedded && (
       <header className="border-b bg-background/80 backdrop-blur sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -203,8 +204,29 @@ export function ScreenerDashboard() {
           </div>
         </div>
       </header>
+      )}
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
+      {embedded && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Intraday Screener</h2>
+            <p className="text-muted-foreground text-sm">Find liquid stocks with intraday movement</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {data && (
+              <Badge variant="outline" className="capitalize">
+                Market {data.marketStatus.toLowerCase().replace("_", " ")}
+              </Badge>
+            )}
+            <Button variant="outline" size="sm" onClick={fetchScreen} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className={embedded ? "space-y-6" : "container mx-auto px-4 py-6 space-y-6"}>
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Not financial advice</AlertTitle>
@@ -388,7 +410,7 @@ export function ScreenerDashboard() {
             </div>
           </TabsContent>
         </Tabs>
-      </main>
+      </div>
     </div>
   );
 }

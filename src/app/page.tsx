@@ -1,5 +1,5 @@
-import { ScreenerDashboard } from "@/components/screener-dashboard";
+import { AppShell } from "@/components/app-shell";
 
 export default function Home() {
-  return <ScreenerDashboard />;
+  return <AppShell />;
 }

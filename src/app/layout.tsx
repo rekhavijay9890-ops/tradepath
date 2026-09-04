@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IntradayPulse — NSE & BSE Intraday Screener",
+  title: "TradePath — NSE/BSE Trading Journey",
   description:
-    "Screen NIFTY stocks for intraday trading by volume, volatility, and momentum. Educational tool — not financial advice.",
+    "4-phase trading education app: Learn, Paper Trade, Go Live, Scale. Includes intraday screener, trade journal, and expectancy analytics.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
