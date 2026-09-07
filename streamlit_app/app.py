@@ -45,6 +45,8 @@ from data_engine import NIFTY_50_SYMBOLS, NIFTY_SYMBOLS, fetch_historical_data
 from risk_manager import calculate_position_size
 from strategy_engine import SIGNAL_BUY, SIGNAL_SELL, apply_strategy, classify_latest_signal
 
+APP_VERSION = "v6.1"
+
 
 def _return_color(value: float) -> str:
     if value > 0:
@@ -342,6 +344,7 @@ with tab_screener:
 # ── Tab 2: Backtester ─────────────────────────────────────────────────────────
 with tab_backtest:
     st.subheader("Strategy Backtester")
+    st.caption(f"Build {APP_VERSION}")
     st.markdown(
         f"Date-range backtest · **{int(TRAIN_RATIO * 100)}% train / {int(TEST_RATIO * 100)}% OOS** "
         "· 0.1% fee per trade leg · long-only"
@@ -384,21 +387,22 @@ with tab_backtest:
                 else:
                     strat_df = apply_strategy(hist)
                     report = run_backtest_analysis(strat_df)
-                    st.session_state["bt_report"] = report
-                    st.session_state["bt_df"] = strat_df
-                    st.session_state["bt_symbol"] = selected
-                    st.session_state["bt_start"] = bt_start.isoformat()
-                    st.session_state["bt_end"] = bt_end.isoformat()
+                    st.session_state["bt_results"] = {
+                        "report": report,
+                        "df": strat_df,
+                        "symbol": selected,
+                        "start": bt_start.isoformat(),
+                        "end": bt_end.isoformat(),
+                    }
 
-    if "bt_report" in st.session_state:
-        report = st.session_state["bt_report"]
+    if "bt_results" in st.session_state:
+        stored = st.session_state["bt_results"]
+        report = stored["report"]
         bt = report.full
         oos = report.test
-        strat_df = st.session_state["bt_df"]
-        sym = st.session_state.get("bt_symbol", selected)
-        range_label = (
-            f"{st.session_state.get('bt_start', '')} → {st.session_state.get('bt_end', '')}"
-        )
+        strat_df = stored["df"]
+        sym = stored["symbol"]
+        range_label = f"{stored['start']} → {stored['end']}"
 
         _regime_badge(report.regime)
 
