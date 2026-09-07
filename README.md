@@ -1,70 +1,58 @@
-# TradePath
+# Quantitative Stock Analytics & Screener
 
-A 4-phase intraday trading education app for India's NSE/BSE markets.
+A modular Python application for screening Nifty 50 stocks, sizing positions with fixed fractional risk, and backtesting an EMA/RSI strategy — built with **Streamlit**, **yfinance**, **pandas**, and **pandas-ta**.
 
-**Two versions available:**
-- **Streamlit + 5paisa** (Python) — recommended if you have a 5paisa account
-- **Next.js** (web) — browser-only, no broker needed
+## Architecture (4 Layers)
 
----
+| Layer | Module | Responsibility |
+|-------|--------|----------------|
+| 1 | `data_engine.py` | Fetch OHLCV data via yfinance; normalize timezone-aware indices |
+| 2 | `strategy_engine.py` | Compute EMA(20), EMA(50), RSI(14); generate Buy/Hold/Exit signals |
+| 3 | `risk_manager.py` | 1% risk position sizing from capital, entry, and stop-loss |
+| 4 | `backtest_engine.py` | Simulate strategy returns vs buy-and-hold benchmark |
 
-## Streamlit App (your 5paisa code)
+The Streamlit UI (`app.py`) orchestrates all layers.
 
-### Setup
+## Strategy Rules
+
+- **Buy:** 20 EMA > 50 EMA **and** RSI(14) > 50
+- **Exit:** 20 EMA < 50 EMA **or** RSI(14) < 40
+- **Hold:** Buy criteria still met on consecutive days
+- **Fresh Buy:** Buy criteria met for the first time after a non-buy period
+
+## Features
+
+1. **Risk Calculator (Sidebar)** — Enter total capital, entry price, and stop loss to compute exact share count capped at 1% max loss.
+2. **Live Market Screener (Tab 1)** — Scans 50 Nifty stocks with 6 months of daily data; highlights Fresh Buy, Hold, and Exit signals.
+3. **Backtesting Engine (Tab 2)** — Select any Nifty 50 stock, run a 2-year backtest, and compare cumulative strategy vs buy-and-hold returns.
+
+## Setup
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your 5paisa API keys from https://xstream.5paisa.com
 ```
 
-### Run
+## Run
 
 ```bash
-streamlit run streamlit_app/app.py --server.port 8742
+streamlit run app.py --server.port 8741
 ```
 
-Open **http://localhost:8742**
+Open the URL shown in the terminal (default: `http://localhost:8741`).
 
-### Features
+## Project Structure
 
-| Page | What it does |
-|------|-------------|
-| **Home** | Overview and progress |
-| **Phase 1: Learn** | Order types, margin, costs, taxes |
-| **Risk Calculator** | 1% risk position sizing (your original code, improved) |
-| **Screener** | Live NSE stock prices (5paisa or Yahoo fallback) |
-| **Paper Trade** | Practice with ₹1L virtual money + trade journal |
-| **Live Trade** | Place real orders via 5paisa API |
-| **Scale** | Monthly P&L tracker for scaling decisions |
-| **5paisa Connect** | OAuth or TOTP broker login |
-
-### 5paisa Login
-
-1. Get API keys from [xstream.5paisa.com](https://xstream.5paisa.com)
-2. Add them to `.env`
-3. In the app → **5paisa Connect** → OAuth or TOTP login
-4. OAuth: open the login URL, copy `RequestToken` from redirect URL, paste in app
-
-> Note: Username/password login is deprecated by 5paisa. Use OAuth or TOTP.
-
----
-
-## Next.js App (alternative)
-
-```bash
-npm install
-npm run dev -- -p 4317
+```
+app.py               # Streamlit dashboard and UI routing
+data_engine.py       # yfinance data fetching
+strategy_engine.py   # Technical indicators and signals
+risk_manager.py      # 1% risk position sizing
+backtest_engine.py   # Strategy backtesting
+requirements.txt     # Python dependencies
 ```
 
-Open **http://localhost:4317**
+## Notes
 
----
-
-## Disclaimer
-
-Educational tool only. Not financial advice. Most retail intraday traders lose money.
-
-## License
-
-MIT
+- Tickers use the NSE suffix (e.g. `RELIANCE.NS`). Data is sourced from Yahoo Finance via `yfinance`.
+- Datetime indices are normalized to timezone-naive UTC for compatibility with Streamlit charts and pandas-ta.
+- This tool is for educational and analytical purposes only — not financial advice.
