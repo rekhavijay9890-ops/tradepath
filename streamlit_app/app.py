@@ -38,6 +38,52 @@ from data_engine import NIFTY_50_SYMBOLS, NIFTY_SYMBOLS, fetch_historical_data
 from risk_manager import calculate_position_size
 from strategy_engine import SIGNAL_BUY, SIGNAL_SELL, apply_strategy, classify_latest_signal
 
+
+def _return_color(value: float) -> str:
+    if value > 0:
+        return "#16a34a"
+    if value < 0:
+        return "#dc2626"
+    return "#0f172a"
+
+
+def _kpi_card(label: str, value: str, value_color: str = "#0f172a") -> None:
+    """HTML KPI card — reliable contrast on Streamlit light theme."""
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 1rem 1.1rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        ">
+            <div style="color:#64748b;font-size:0.82rem;font-weight:600;
+                        margin-bottom:6px;text-transform:uppercase;letter-spacing:0.03em;">
+                {label}
+            </div>
+            <div style="color:{value_color};font-size:1.65rem;font-weight:700;line-height:1.2;">
+                {value}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _kpi_row(items: list[tuple[str, str, str]]) -> None:
+    cols = st.columns(len(items))
+    for col, (label, value, color) in zip(cols, items):
+        with col:
+            _kpi_card(label, value, color)
+
+
+def _format_profit_factor(value: float) -> str:
+    if value == float("inf"):
+        return "∞"
+    return f"{value:.2f}"
+
+
 # Clean web-page look (hide Streamlit chrome)
 st.markdown(
     """
@@ -51,10 +97,6 @@ st.markdown(
     }
     .web-hero h1 { color: #f8fafc; font-size: 1.85rem; margin: 0 0 0.5rem 0; }
     .web-hero p { color: #94a3b8; margin: 0; font-size: 1rem; }
-    div[data-testid="stMetric"] {
-        background: #1e293b; border: 1px solid #334155;
-        border-radius: 10px; padding: 0.6rem 1rem;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -241,11 +283,12 @@ with tab_screener:
         fresh = int((sdf["Signal"] == "Fresh Buy Signal").sum())
         exit_n = int((sdf["Signal"] == "Exit").sum())
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Fresh Buy", fresh)
-        c2.metric("Exit", exit_n)
-        c3.metric("In Range", len(sdf))
-        c4.metric("Scanned", len(NIFTY_SYMBOLS))
+        _kpi_row([
+            ("Fresh Buy", str(fresh), "#16a34a"),
+            ("Exit", str(exit_n), "#dc2626"),
+            ("In Range", str(len(sdf)), "#0f172a"),
+            ("Scanned", str(len(NIFTY_SYMBOLS)), "#0f172a"),
+        ])
 
         st.dataframe(
             sdf.style.apply(_style_screener, axis=1),
@@ -291,11 +334,24 @@ with tab_backtest:
         sym = st.session_state.get("bt_symbol", selected)
 
         st.markdown("##### KPI Dashboard")
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Strategy Return", f"{bt.strategy_return_pct:+.2f}%")
-        k2.metric("Buy & Hold Return", f"{bt.market_return_pct:+.2f}%")
-        k3.metric("Win Rate", f"{bt.win_rate_pct:.1f}%")
-        k4.metric("Max Drawdown", f"{bt.max_drawdown_pct:.2f}%")
+        _kpi_row([
+            ("Strategy Return", f"{bt.strategy_return_pct:+.2f}%", _return_color(bt.strategy_return_pct)),
+            ("Buy & Hold Return", f"{bt.market_return_pct:+.2f}%", _return_color(bt.market_return_pct)),
+            ("CAGR", f"{bt.cagr_pct:+.2f}%", _return_color(bt.cagr_pct)),
+            ("Sharpe Ratio", f"{bt.sharpe_ratio:.2f}", "#2563eb"),
+        ])
+        _kpi_row([
+            ("Total Trades", str(bt.total_trades), "#0f172a"),
+            ("Avg Profit/Loss", f"{bt.avg_profit_loss_pct:+.2f}%", _return_color(bt.avg_profit_loss_pct)),
+            ("Profit Factor", _format_profit_factor(bt.profit_factor), "#7c3aed"),
+            ("Win Rate", f"{bt.win_rate_pct:.1f}%", "#2563eb"),
+        ])
+        _kpi_row([
+            ("Largest Win", f"{bt.largest_win_pct:+.2f}%", "#16a34a"),
+            ("Largest Loss", f"{bt.largest_loss_pct:+.2f}%", "#dc2626"),
+            ("Max Consec. Losses", str(bt.max_consecutive_losses), "#dc2626"),
+            ("Max Drawdown", f"{bt.max_drawdown_pct:.2f}%", "#dc2626"),
+        ])
 
         alpha = bt.strategy_return_pct - bt.market_return_pct
         st.caption(f"Alpha: **{alpha:+.2f}%** · {sym.replace('.NS', '')} · 2-year daily")
@@ -320,8 +376,6 @@ with tab_backtest:
                 st.info("No completed round-trip trades in this period.")
             else:
                 st.dataframe(bt.trade_log, use_container_width=True, hide_index=True)
-                avg_pnl = bt.trade_log["Trade P&L (%)"].mean()
-                st.caption(f"Trades: {len(bt.trade_log)} · Avg P&L: {avg_pnl:+.2f}%")
     else:
         st.info("Select a stock and click **▶ Run Backtest**.")
 

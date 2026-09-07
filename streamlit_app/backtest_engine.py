@@ -23,6 +23,14 @@ class BacktestResult:
     trade_log: pd.DataFrame
     strategy_return_pct: float
     market_return_pct: float
+    total_trades: int
+    avg_profit_loss_pct: float
+    profit_factor: float
+    sharpe_ratio: float
+    largest_win_pct: float
+    largest_loss_pct: float
+    max_consecutive_losses: int
+    cagr_pct: float
 
 
 def _max_drawdown(cumulative: pd.Series) -> float:
@@ -83,6 +91,73 @@ def _build_trade_log(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(trades)
 
 
+def _max_consecutive_losses(pnls: pd.Series) -> int:
+    """Longest streak of losing trades."""
+    max_streak = streak = 0
+    for pnl in pnls:
+        if pnl < 0:
+            streak += 1
+            max_streak = max(max_streak, streak)
+        else:
+            streak = 0
+    return max_streak
+
+
+def _profit_factor(pnls: pd.Series) -> float:
+    """Gross wins / gross losses. Returns 0 when no losses, capped display handled in UI."""
+    gross_profit = pnls[pnls > 0].sum()
+    gross_loss = abs(pnls[pnls < 0].sum())
+    if gross_loss == 0:
+        return float("inf") if gross_profit > 0 else 0.0
+    return round(float(gross_profit / gross_loss), 2)
+
+
+def _sharpe_ratio(daily_returns: pd.Series, periods_per_year: int = 252) -> float:
+    """Annualized Sharpe ratio (risk-free rate = 0)."""
+    if daily_returns.empty or daily_returns.std() == 0:
+        return 0.0
+    return round(float(daily_returns.mean() / daily_returns.std() * np.sqrt(periods_per_year)), 2)
+
+
+def _cagr_pct(cumulative: pd.Series) -> float:
+    """Compound annual growth rate from cumulative return series."""
+    if cumulative.empty or len(cumulative) < 2:
+        return 0.0
+    start, end = cumulative.index[0], cumulative.index[-1]
+    years = (pd.Timestamp(end) - pd.Timestamp(start)).days / 365.25
+    if years <= 0:
+        return 0.0
+    final_multiple = float(cumulative.iloc[-1])
+    if final_multiple <= 0:
+        return 0.0
+    cagr = (final_multiple ** (1 / years) - 1) * 100
+    return round(cagr, 2)
+
+
+def _empty_result() -> BacktestResult:
+    empty = pd.Series(dtype=float)
+    empty_log = pd.DataFrame(
+        columns=["Entry Date", "Entry Price", "Exit Date", "Exit Price", "Trade P&L (%)"]
+    )
+    return BacktestResult(
+        cumulative_market=empty,
+        cumulative_strategy=empty,
+        win_rate_pct=0.0,
+        max_drawdown_pct=0.0,
+        trade_log=empty_log,
+        strategy_return_pct=0.0,
+        market_return_pct=0.0,
+        total_trades=0,
+        avg_profit_loss_pct=0.0,
+        profit_factor=0.0,
+        sharpe_ratio=0.0,
+        largest_win_pct=0.0,
+        largest_loss_pct=0.0,
+        max_consecutive_losses=0,
+        cagr_pct=0.0,
+    )
+
+
 def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
     """
     Simulate strategy returns vs market with transaction costs.
@@ -106,16 +181,11 @@ def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
         cumulative_market, cumulative_strategy, win_rate_pct,
         max_drawdown_pct, trade_log, strategy_return_pct, market_return_pct
     """
-    empty = pd.Series(dtype=float)
-    empty_log = pd.DataFrame(
-        columns=["Entry Date", "Entry Price", "Exit Date", "Exit Price", "Trade P&L (%)"]
-    )
-
     if df_with_signals.empty or "Close" not in df_with_signals.columns:
-        return BacktestResult(empty, empty, 0.0, 0.0, empty_log, 0.0, 0.0)
+        return _empty_result()
 
     df = df_with_signals.copy()
-    daily_market = df["Close"].pct_change().fillna(0.0)
+    daily_market = df["Close"].pct_change(fill_method=None).fillna(0.0)
 
     signal = df["Signal"].fillna(SIGNAL_NEUTRAL).astype(int)
     prev_signal = signal.shift(1).fillna(SIGNAL_NEUTRAL).astype(int)
@@ -133,14 +203,29 @@ def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
     trade_log = _build_trade_log(df)
 
     if not trade_log.empty:
-        wins = (trade_log["Trade P&L (%)"] > 0).sum()
+        pnls = trade_log["Trade P&L (%)"]
+        wins = (pnls > 0).sum()
         win_rate = round(float(wins / len(trade_log) * 100), 2)
+        total_trades = len(trade_log)
+        avg_pnl = round(float(pnls.mean()), 2)
+        profit_factor = _profit_factor(pnls)
+        largest_win = round(float(pnls.max()), 2)
+        largest_loss = round(float(pnls.min()), 2)
+        max_consec_losses = _max_consecutive_losses(pnls)
     else:
         win_rate = 0.0
+        total_trades = 0
+        avg_pnl = 0.0
+        profit_factor = 0.0
+        largest_win = 0.0
+        largest_loss = 0.0
+        max_consec_losses = 0
 
     max_dd = _max_drawdown(cumulative_strategy)
     strat_ret = round(float((cumulative_strategy.iloc[-1] - 1) * 100), 2)
     mkt_ret = round(float((cumulative_market.iloc[-1] - 1) * 100), 2)
+    sharpe = _sharpe_ratio(daily_strategy)
+    cagr = _cagr_pct(cumulative_strategy)
 
     cumulative_market.name = "Market"
     cumulative_strategy.name = "Strategy"
@@ -153,4 +238,12 @@ def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
         trade_log=trade_log,
         strategy_return_pct=strat_ret,
         market_return_pct=mkt_ret,
+        total_trades=total_trades,
+        avg_profit_loss_pct=avg_pnl,
+        profit_factor=profit_factor,
+        sharpe_ratio=sharpe,
+        largest_win_pct=largest_win,
+        largest_loss_pct=largest_loss,
+        max_consecutive_losses=max_consec_losses,
+        cagr_pct=cagr,
     )
