@@ -1,36 +1,37 @@
 #!/usr/bin/env bash
-# Deploy latest app to GitHub. Run in Codespace:
+# Deploy latest app to GitHub. Run in Codespace (no Cursor remote needed):
 #   bash deploy.sh
+#   git push origin main
 set -euo pipefail
 cd "$(dirname "$0")"
-
-echo "=== Quant App Deploy v5 ==="
-
+ 
+echo "=== Quant App Deploy v6 ==="
+ 
 python3 install_app.py
-
+ 
 echo ""
 echo "Verifying files..."
 grep -q "_kpi_card" app.py || { echo "ERROR: app.py missing KPI cards"; exit 1; }
-grep -q "total_trades" backtest_engine.py || { echo "ERROR: backtest_engine missing new metrics"; exit 1; }
+grep -q "run_backtest_analysis" app.py || { echo "ERROR: app.py missing train/test backtest"; exit 1; }
+grep -q "Out-of-Sample KPIs" app.py || { echo "ERROR: app.py missing OOS KPI section"; exit 1; }
+grep -q "build_benchmark_comparison" backtest_engine.py || { echo "ERROR: backtest_engine missing benchmark"; exit 1; }
+grep -q "classify_market_regime" backtest_engine.py || { echo "ERROR: backtest_engine missing regime"; exit 1; }
+grep -q 'start: str | None = None' data_engine.py || { echo "ERROR: data_engine missing date range"; exit 1; }
 grep -q "k1.metric" app.py && { echo "ERROR: app.py still has old st.metric KPIs"; exit 1; }
-grep -q "cagr_pct" app.py || { echo "ERROR: app.py missing CAGR KPI"; exit 1; }
-
+test -f streamlit_app/app.py || { echo "ERROR: streamlit_app/app.py missing"; exit 1; }
+ 
 echo "All checks passed."
 echo ""
-
+ 
 git add -A
 git status
-
+ 
 if git diff --cached --quiet; then
-  echo "Nothing to commit — files may already match."
+  echo "Nothing new to commit — files already up to date."
 else
-  git commit -m "Deploy v5: HTML KPI cards + advanced backtest metrics"
+  git commit -m "Deploy v6: date range, train/test split, regime, OOS KPIs, benchmark"
 fi
-
+ 
 echo ""
-echo "Pushing to GitHub..."
-git pull origin main --no-rebase || true
-git push origin main
-
-echo ""
-echo "Done! Reboot your app at share.streamlit.io"
+echo "Next: git push origin main"
+echo "Then reboot your app at share.streamlit.io"

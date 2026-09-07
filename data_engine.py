@@ -88,7 +88,12 @@ def _normalize_index(df: pd.DataFrame) -> pd.DataFrame:
     return out.sort_index().loc[~out.index.duplicated(keep="last")]
 
 
-def fetch_historical_data(symbol: str, period: str = "6m") -> pd.DataFrame:
+def fetch_historical_data(
+    symbol: str,
+    period: str = "6m",
+    start: str | None = None,
+    end: str | None = None,
+) -> pd.DataFrame:
     """
     Fetch daily OHLCV history for a single symbol.
 
@@ -97,23 +102,38 @@ def fetch_historical_data(symbol: str, period: str = "6m") -> pd.DataFrame:
     symbol : str
         Yahoo Finance ticker (e.g. 'RELIANCE.NS').
     period : str
-        Lookback window ('6m', '1y', '2y', …).
+        Lookback window ('6m', '1y', '2y', …). Ignored when ``start``/``end`` are set.
+    start, end : str, optional
+        Inclusive date range (YYYY-MM-DD). ``end`` is adjusted +1 day for yfinance.
 
     Returns
     -------
     pd.DataFrame
         Columns: Open, High, Low, Close, Volume.  Tz-naive DatetimeIndex.
     """
-    yf_period = _PERIOD_MAP.get(period, period)
-
-    raw = yf.download(
-        symbol,
-        period=yf_period,
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        threads=False,
-    )
+    if start is not None or end is not None:
+        yf_end = None
+        if end is not None:
+            yf_end = (pd.Timestamp(end) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        raw = yf.download(
+            symbol,
+            start=start,
+            end=yf_end,
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
+    else:
+        yf_period = _PERIOD_MAP.get(period, period)
+        raw = yf.download(
+            symbol,
+            period=yf_period,
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
 
     if raw.empty:
         return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])

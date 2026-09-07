@@ -10,6 +10,8 @@ risk_manager.calculate_position_size  →  Sidebar
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pandas as pd
 import streamlit as st
 
@@ -33,7 +35,12 @@ except ImportError:
     st.error("Missing packages. Run: `pip install -r requirements.txt`")
     st.stop()
 
-from backtest_engine import calculate_returns
+from backtest_engine import (
+    TEST_RATIO,
+    TRAIN_RATIO,
+    build_benchmark_comparison,
+    run_backtest_analysis,
+)
 from data_engine import NIFTY_50_SYMBOLS, NIFTY_SYMBOLS, fetch_historical_data
 from risk_manager import calculate_position_size
 from strategy_engine import SIGNAL_BUY, SIGNAL_SELL, apply_strategy, classify_latest_signal
@@ -82,6 +89,38 @@ def _format_profit_factor(value: float) -> str:
     if value == float("inf"):
         return "∞"
     return f"{value:.2f}"
+
+
+def _regime_style(regime: str) -> tuple[str, str]:
+    """Return (background, text) colors for market regime badge."""
+    styles = {
+        "Bull": ("#dcfce7", "#166534"),
+        "Bear": ("#fee2e2", "#991b1b"),
+        "Sideways": ("#e0e7ff", "#3730a3"),
+        "High Volatility": ("#ffedd5", "#c2410c"),
+    }
+    return styles.get(regime, ("#f1f5f9", "#475569"))
+
+
+def _regime_badge(regime: str) -> None:
+    bg, fg = _regime_style(regime)
+    st.markdown(
+        f"""
+        <div style="
+            display:inline-block;
+            background:{bg};
+            color:{fg};
+            border:1px solid {fg}33;
+            border-radius:999px;
+            padding:0.35rem 0.9rem;
+            font-weight:700;
+            font-size:0.9rem;
+        ">
+            Market Regime: {regime}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # Clean web-page look (hide Streamlit chrome)
@@ -303,9 +342,15 @@ with tab_screener:
 # ── Tab 2: Backtester ─────────────────────────────────────────────────────────
 with tab_backtest:
     st.subheader("Strategy Backtester")
-    st.markdown("2-year simulation · 0.1% fee per trade leg · long-only")
+    st.markdown(
+        f"Date-range backtest · **{int(TRAIN_RATIO * 100)}% train / {int(TEST_RATIO * 100)}% OOS** "
+        "· 0.1% fee per trade leg · long-only"
+    )
 
-    col_sel, col_btn = st.columns([3, 1])
+    _default_end = date.today()
+    _default_start = _default_end - timedelta(days=730)
+
+    col_sel, col_start, col_end, col_btn = st.columns([2, 1.2, 1.2, 1])
     with col_sel:
         selected = st.selectbox(
             "Select Stock",
@@ -313,27 +358,58 @@ with tab_backtest:
             format_func=lambda s: s.replace(".NS", ""),
             key="bt_stock",
         )
+    with col_start:
+        bt_start = st.date_input("Start Date", value=_default_start, key="bt_start")
+    with col_end:
+        bt_end = st.date_input("End Date", value=_default_end, key="bt_end")
     with col_btn:
+        st.write("")
+        st.write("")
         run_bt = st.button("▶ Run Backtest", type="primary", use_container_width=True)
 
     if run_bt:
-        with st.spinner(f"Backtesting {selected}…"):
-            hist = fetch_historical_data(selected, period="2y")
-            if hist.empty:
-                st.error("No data returned.")
-            else:
-                strat_df = apply_strategy(hist)
-                bt = calculate_returns(strat_df)
-                st.session_state["bt_result"] = bt
-                st.session_state["bt_df"] = strat_df
-                st.session_state["bt_symbol"] = selected
+        if bt_start >= bt_end:
+            st.error("Start Date must be before End Date.")
+        else:
+            with st.spinner(f"Backtesting {selected}…"):
+                hist = fetch_historical_data(
+                    selected,
+                    start=bt_start.isoformat(),
+                    end=bt_end.isoformat(),
+                )
+                if hist.empty:
+                    st.error("No data returned for the selected date range.")
+                elif len(hist) < 60:
+                    st.error("Need at least 60 trading days in the selected range.")
+                else:
+                    strat_df = apply_strategy(hist)
+                    report = run_backtest_analysis(strat_df)
+                    st.session_state["bt_report"] = report
+                    st.session_state["bt_df"] = strat_df
+                    st.session_state["bt_symbol"] = selected
+                    st.session_state["bt_start"] = bt_start.isoformat()
+                    st.session_state["bt_end"] = bt_end.isoformat()
 
-    if "bt_result" in st.session_state:
-        bt = st.session_state["bt_result"]
+    if "bt_report" in st.session_state:
+        report = st.session_state["bt_report"]
+        bt = report.full
+        oos = report.test
         strat_df = st.session_state["bt_df"]
         sym = st.session_state.get("bt_symbol", selected)
+        range_label = (
+            f"{st.session_state.get('bt_start', '')} → {st.session_state.get('bt_end', '')}"
+        )
 
-        st.markdown("##### KPI Dashboard")
+        _regime_badge(report.regime)
+
+        st.markdown(
+            f"**Train/Test split:** {int(report.train_ratio * 100)}% in-sample "
+            f"({report.train_start} → {report.train_end}) · "
+            f"{int(TEST_RATIO * 100)}% out-of-sample "
+            f"({report.test_start} → {report.test_end})"
+        )
+
+        st.markdown("##### Full-Period KPI Dashboard")
         _kpi_row([
             ("Strategy Return", f"{bt.strategy_return_pct:+.2f}%", _return_color(bt.strategy_return_pct)),
             ("Buy & Hold Return", f"{bt.market_return_pct:+.2f}%", _return_color(bt.market_return_pct)),
@@ -353,8 +429,29 @@ with tab_backtest:
             ("Max Drawdown", f"{bt.max_drawdown_pct:.2f}%", "#dc2626"),
         ])
 
+        st.markdown(f"##### Out-of-Sample KPIs ({int(TEST_RATIO * 100)}% Test)")
+        st.caption(f"Unseen hold-out period: {report.test_start} → {report.test_end}")
+        _kpi_row([
+            ("Return", f"{oos.strategy_return_pct:+.2f}%", _return_color(oos.strategy_return_pct)),
+            ("CAGR", f"{oos.cagr_pct:+.2f}%", _return_color(oos.cagr_pct)),
+            ("Win Rate", f"{oos.win_rate_pct:.1f}%", "#2563eb"),
+            ("Profit Factor", _format_profit_factor(oos.profit_factor), "#7c3aed"),
+        ])
+        _kpi_row([
+            ("Max Drawdown", f"{oos.max_drawdown_pct:.2f}%", "#dc2626"),
+            ("Sharpe", f"{oos.sharpe_ratio:.2f}", "#2563eb"),
+            ("# Trades", str(oos.total_trades), "#0f172a"),
+            ("Buy & Hold (OOS)", f"{oos.market_return_pct:+.2f}%", _return_color(oos.market_return_pct)),
+        ])
+
+        st.markdown("##### Benchmark — Strategy vs Buy & Hold")
+        benchmark_df = build_benchmark_comparison(report.train, report.test)
+        st.dataframe(benchmark_df, use_container_width=True, hide_index=True)
+
         alpha = bt.strategy_return_pct - bt.market_return_pct
-        st.caption(f"Alpha: **{alpha:+.2f}%** · {sym.replace('.NS', '')} · 2-year daily")
+        st.caption(
+            f"Alpha (full period): **{alpha:+.2f}%** · {sym.replace('.NS', '')} · {range_label}"
+        )
 
         st.markdown("##### Price Chart with Signals")
         fig = _build_candlestick_chart(strat_df, sym)
@@ -377,7 +474,7 @@ with tab_backtest:
             else:
                 st.dataframe(bt.trade_log, use_container_width=True, hide_index=True)
     else:
-        st.info("Select a stock and click **▶ Run Backtest**.")
+        st.info("Select a stock, set the date range, and click **▶ Run Backtest**.")
 
 st.divider()
 st.caption("Educational tool only · Not financial advice · Data via Yahoo Finance")

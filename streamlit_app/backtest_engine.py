@@ -23,6 +23,7 @@ class BacktestResult:
     trade_log: pd.DataFrame
     strategy_return_pct: float
     market_return_pct: float
+    market_cagr_pct: float
     total_trades: int
     avg_profit_loss_pct: float
     profit_factor: float
@@ -31,6 +32,24 @@ class BacktestResult:
     largest_loss_pct: float
     max_consecutive_losses: int
     cagr_pct: float
+
+
+@dataclass
+class BacktestReport:
+    """Full analysis: train/test split, regime, and in-sample + OOS results."""
+    regime: str
+    full: BacktestResult
+    train: BacktestResult
+    test: BacktestResult
+    train_ratio: float
+    train_start: str
+    train_end: str
+    test_start: str
+    test_end: str
+
+
+TRAIN_RATIO = 0.70
+TEST_RATIO = 0.30
 
 
 def _max_drawdown(cumulative: pd.Series) -> float:
@@ -147,6 +166,7 @@ def _empty_result() -> BacktestResult:
         trade_log=empty_log,
         strategy_return_pct=0.0,
         market_return_pct=0.0,
+        market_cagr_pct=0.0,
         total_trades=0,
         avg_profit_loss_pct=0.0,
         profit_factor=0.0,
@@ -226,6 +246,7 @@ def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
     mkt_ret = round(float((cumulative_market.iloc[-1] - 1) * 100), 2)
     sharpe = _sharpe_ratio(daily_strategy)
     cagr = _cagr_pct(cumulative_strategy)
+    market_cagr = _cagr_pct(cumulative_market)
 
     cumulative_market.name = "Market"
     cumulative_strategy.name = "Strategy"
@@ -238,6 +259,7 @@ def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
         trade_log=trade_log,
         strategy_return_pct=strat_ret,
         market_return_pct=mkt_ret,
+        market_cagr_pct=market_cagr,
         total_trades=total_trades,
         avg_profit_loss_pct=avg_pnl,
         profit_factor=profit_factor,
@@ -247,3 +269,148 @@ def calculate_returns(df_with_signals: pd.DataFrame) -> BacktestResult:
         max_consecutive_losses=max_consec_losses,
         cagr_pct=cagr,
     )
+
+
+def classify_market_regime(df: pd.DataFrame) -> str:
+    """
+    Classify recent market regime from price action.
+
+    Bull / Bear / Sideways / High Volatility
+    """
+    if df.empty or len(df) < 60 or "Close" not in df.columns:
+        return "Unknown"
+
+    close = df["Close"]
+    price = float(close.iloc[-1])
+    sma50 = float(close.rolling(50).mean().iloc[-1])
+    lookback = min(63, len(close) - 1)
+    ret_pct = (price / float(close.iloc[-lookback]) - 1) * 100
+
+    daily_ret = close.pct_change(fill_method=None)
+    vol = daily_ret.rolling(20).std() * np.sqrt(252)
+    vol_now = float(vol.iloc[-1]) if pd.notna(vol.iloc[-1]) else 0.0
+    vol_med = float(vol.median()) if vol.notna().any() else 0.0
+
+    if vol_med > 0 and vol_now > vol_med * 1.4:
+        return "High Volatility"
+    if price > sma50 and ret_pct > 5:
+        return "Bull"
+    if price < sma50 and ret_pct < -5:
+        return "Bear"
+    return "Sideways"
+
+
+def _period_label(df: pd.DataFrame) -> tuple[str, str]:
+    if df.empty:
+        return "", ""
+    start = pd.Timestamp(df.index[0]).strftime("%Y-%m-%d")
+    end = pd.Timestamp(df.index[-1]).strftime("%Y-%m-%d")
+    return start, end
+
+
+def run_backtest_analysis(
+    df_with_signals: pd.DataFrame,
+    train_ratio: float = TRAIN_RATIO,
+) -> BacktestReport:
+    """Run full-period, train (70%), and OOS test (30%) backtests."""
+    full = calculate_returns(df_with_signals)
+    regime = classify_market_regime(df_with_signals)
+
+    if df_with_signals.empty or len(df_with_signals) < 40:
+        empty = _empty_result()
+        return BacktestReport(
+            regime=regime,
+            full=full,
+            train=empty,
+            test=empty,
+            train_ratio=train_ratio,
+            train_start="",
+            train_end="",
+            test_start="",
+            test_end="",
+        )
+
+    split_idx = max(int(len(df_with_signals) * train_ratio), 30)
+    split_idx = min(split_idx, len(df_with_signals) - 10)
+
+    train_df = df_with_signals.iloc[:split_idx]
+    test_df = df_with_signals.iloc[split_idx:]
+
+    train = calculate_returns(train_df)
+    test = calculate_returns(test_df)
+    t0, t1 = _period_label(train_df)
+    o0, o1 = _period_label(test_df)
+
+    return BacktestReport(
+        regime=regime,
+        full=full,
+        train=train,
+        test=test,
+        train_ratio=train_ratio,
+        train_start=t0,
+        train_end=t1,
+        test_start=o0,
+        test_end=o1,
+    )
+
+
+def build_benchmark_comparison(train: BacktestResult, test: BacktestResult) -> pd.DataFrame:
+    """Strategy vs Buy & Hold — train and OOS side by side."""
+
+    def _pf(v: float) -> str:
+        if v == float("inf"):
+            return "∞"
+        return f"{v:.2f}"
+
+    rows = [
+        {
+            "Metric": "Return",
+            "Strategy (Train 70%)": f"{train.strategy_return_pct:+.2f}%",
+            "Buy & Hold (Train)": f"{train.market_return_pct:+.2f}%",
+            "Strategy (OOS 30%)": f"{test.strategy_return_pct:+.2f}%",
+            "Buy & Hold (OOS)": f"{test.market_return_pct:+.2f}%",
+        },
+        {
+            "Metric": "CAGR",
+            "Strategy (Train 70%)": f"{train.cagr_pct:+.2f}%",
+            "Buy & Hold (Train)": f"{train.market_cagr_pct:+.2f}%",
+            "Strategy (OOS 30%)": f"{test.cagr_pct:+.2f}%",
+            "Buy & Hold (OOS)": f"{test.market_cagr_pct:+.2f}%",
+        },
+        {
+            "Metric": "Win Rate",
+            "Strategy (Train 70%)": f"{train.win_rate_pct:.1f}%",
+            "Buy & Hold (Train)": "—",
+            "Strategy (OOS 30%)": f"{test.win_rate_pct:.1f}%",
+            "Buy & Hold (OOS)": "—",
+        },
+        {
+            "Metric": "Profit Factor",
+            "Strategy (Train 70%)": _pf(train.profit_factor),
+            "Buy & Hold (Train)": "—",
+            "Strategy (OOS 30%)": _pf(test.profit_factor),
+            "Buy & Hold (OOS)": "—",
+        },
+        {
+            "Metric": "Max Drawdown",
+            "Strategy (Train 70%)": f"{train.max_drawdown_pct:.2f}%",
+            "Buy & Hold (Train)": f"{_max_drawdown(train.cumulative_market):.2f}%",
+            "Strategy (OOS 30%)": f"{test.max_drawdown_pct:.2f}%",
+            "Buy & Hold (OOS)": f"{_max_drawdown(test.cumulative_market):.2f}%",
+        },
+        {
+            "Metric": "Sharpe",
+            "Strategy (Train 70%)": f"{train.sharpe_ratio:.2f}",
+            "Buy & Hold (Train)": "—",
+            "Strategy (OOS 30%)": f"{test.sharpe_ratio:.2f}",
+            "Buy & Hold (OOS)": "—",
+        },
+        {
+            "Metric": "# Trades",
+            "Strategy (Train 70%)": str(train.total_trades),
+            "Buy & Hold (Train)": "—",
+            "Strategy (OOS 30%)": str(test.total_trades),
+            "Buy & Hold (OOS)": "—",
+        },
+    ]
+    return pd.DataFrame(rows)
